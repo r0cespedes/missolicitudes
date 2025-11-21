@@ -1,0 +1,7 @@
+_schema-version: "3.1"
+ID: missolicitudes.dev
+extends: missolicitudes
+
+parameters:
+  successfactors-url: https://hcm-eu30.hr.cloud.sap/
+  btp-auth-url: https://amb-btp-dev-6m5idb2d.authentication.eu10.hana.ondemand.com

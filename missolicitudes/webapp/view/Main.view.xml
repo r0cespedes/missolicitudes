@@ -1,0 +1,278 @@
+<mvc:View
+    controllerName="com.inetum.missolicitudes.controller.Main"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:m="sap.m"
+    xmlns:core="sap.ui.core"
+    xmlns:table="sap.ui.table"
+    xmlns:rm="sap.ui.table.rowmodes"
+    height="100%"
+>
+    <Page
+        id="misSolicitudesPage"
+        title=""
+        showNavButton="false"
+        enableScrolling="true"
+    >
+        <customHeader>
+            <Toolbar>
+                <core:Icon
+                    src="sap-icon://task"
+                    size="1.5rem"
+                    class="sapUiNoMarginEnd sapUiMediumMarginBegin"
+                />
+                <Title
+                    text="{i18n>misSolicitudesTitle}"
+                    level="H2"
+                />
+            </Toolbar>
+        </customHeader>
+
+        <content>
+            <!-- <VBox
+                class="sapUiMediumMargin"
+                alignItems="Center"
+            > -->
+                <Panel
+                    class="sapUiMediumMarginBottom"
+                    headerText=""
+                >
+                    <!-- <content> -->
+                        <!-- Tabla principal de solicitudes -->
+                        <table:Table
+                            id="idRequestTable"
+                            rows="{solicitudes>/solicitudes/results}"
+                            selectionMode="None"
+                            enableSelectAll="true"
+                            ariaLabelledBy="tableTitle"
+                            alternateRowColors="false"
+                            columnHeaderVisible="true"
+                            enableColumnReordering="true"
+                            showNoData="false"
+                            busyIndicatorDelay="0"
+                            threshold="100"
+                            
+                            enableBusyIndicator="true"
+                            enableCellFilter="true"
+                            class="sapUiResponsiveMargin"
+                        >
+
+                        <table:rowMode>
+                            <rm:Interactive
+                                id="_IDGenInteractive"
+                                rowCount="15"
+                                minRowCount="5"
+                            />
+                        </table:rowMode>
+
+                            <table:extension>
+                                <OverflowToolbar style="Clear">
+                                    <SearchField
+                                        id="searchField"
+                                        placeholder="{i18n>searchPlaceholder}"
+                                        liveChange="onSearch"
+                                        value="{mLocalModel>/globalFilter}"
+                                        width="15rem"
+                                    />
+                                    <ToolbarSpacer />
+                                    <Title
+                                        id="recordCount"
+                                        text="{= ${solicitudes>/solicitudes/totalCount} === 1 
+                                            ? ${solicitudes>/solicitudes/totalCount} + ' ' + ${i18n>singleRecord}
+                                            : ${solicitudes>/solicitudes/totalCount} + ' ' + ${i18n>totalRecords}
+                                          }"
+                                        titleStyle="H5"
+                                    />
+                                </OverflowToolbar>
+                            </table:extension>
+
+                            <table:columns>
+                                <!-- Columna: Solicitud -->
+                                <table:Column
+                                    width="20%"
+                                    sortProperty="cust_nombreSol"
+                                    filterProperty="cust_nombreSol"
+                                    showFilterMenuEntry="true"
+                                    showSortMenuEntry="true"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>solicitud}"
+                                            wrapping="true"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                        <Text
+                                            text="{solicitudes>cust_nombreSol}"
+                                            wrapping="true"
+                                        />
+                                    </table:template>
+                                </table:Column>
+
+                                <!-- Columna: Tipo de Solicitud -->
+                                <table:Column
+                                    width="20%"
+                                    sortProperty="cust_nombreTSol"
+                                    filterProperty="cust_nombreTSol"
+                                    showFilterMenuEntry="true"
+                                    showSortMenuEntry="true"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>tipoSolicitud}"
+                                            wrapping="true"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                        <Text
+                                            text="{solicitudes>cust_nombreTSol}"
+                                            wrapping="true"
+                                        />
+                                    </table:template>
+                                </table:Column>
+
+                                <!-- Columna: Fecha de Solicitud -->
+                                <table:Column
+                                    width="10%"
+                                    sortProperty="cust_fechaSol"
+                                    filterProperty="cust_fechaSol_Str"
+                                    showFilterMenuEntry="true"
+                                    showSortMenuEntry="true"
+                                    hAlign="Center"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>fechaSolicitud}"
+                                            wrapping="true"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                       <Text text="{solicitudes>cust_fechaSol_Str}" />
+                                    </table:template>
+                                </table:Column>
+
+                                <!-- Columna: Estado -->
+                                <table:Column
+                                    width="10%"
+                                    sortProperty="cust_status_Str"
+                                    filterProperty="cust_status_Str"
+                                    showFilterMenuEntry="true"
+                                    showSortMenuEntry="true"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>estado}"
+                                            wrapping="true"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                        <ObjectStatus
+                                            text="{solicitudes>cust_status_Str}"
+                                            state="{
+                                                    path: 'solicitudes>cust_status',
+                                                    formatter: '.formatter.formatStatusState'
+                                                }"
+                                            icon="{
+                                                    path: 'solicitudes>cust_status',
+                                                    formatter: '.formatter.formatStatusIcon'
+                                                }"
+                                        />
+                                    </table:template>
+                                </table:Column>
+
+                                <!-- Columna: Visualzar -->
+                                <table:Column
+                                    width="6%"
+                                    hAlign="Center"
+                                    showFilterMenuEntry="false"
+                                    showSortMenuEntry="false"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>visualize}"
+                                            wrapping="false"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                        <Button
+                                            id="btnVisualize"
+                                            icon="sap-icon://display"
+                                            tooltip="{i18n>visualize}"
+                                            press="onVisualizarPress"
+                                            type="Transparent"
+                                            class="sapUiTinyMarginEnd"
+                                        />
+                                    </table:template>
+                                </table:Column>
+
+                                <!-- Columna: Cancelar -->
+
+                                <table:Column
+                                    width="6%"
+                                    hAlign="Center"
+                                    showFilterMenuEntry="true"
+                                    showSortMenuEntry="true"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>cancel}"
+                                            wrapping="false"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                        <!-- Botón Cancelar (solo si está en curso) -->
+                                        <Button
+                                            icon="sap-icon://decline"
+                                            tooltip="{i18n>cancel}"
+                                            press="onCancelarPress"
+                                            type="Reject"
+                                            visible="{
+                                                    path: 'solicitudes>cust_status',
+                                                    formatter: '.formatter.isStatusEnCurso'
+                                                }"
+                                        />
+                                    </table:template>
+                                </table:Column>
+
+                                 <!-- Columna: Editar -->
+                                <table:Column
+                                    width="6%"
+                                    hAlign="Center"                               
+                                    showFilterMenuEntry="true"
+                                    showSortMenuEntry="true"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>edit}"
+                                            wrapping="false"
+                                        />
+                                    </table:label>
+                                    <table:template>                                 
+                                        <Button
+                                            icon="sap-icon://edit"
+                                            tooltip="{i18n>edit}"
+                                            press="onEditarPress"
+                                            type="Emphasized"
+                                            visible="{
+                                                    path: 'solicitudes>cust_status',
+                                                    formatter: '.formatter.isStatusRequireAction'
+                                                }"
+                                        />
+                                    </table:template>
+                                </table:Column>
+                            </table:columns>
+                            <table:noData>
+                                <IllustratedMessage
+                                    title="{i18n>noDataFound}"
+                                    description="{i18n>noRequestsAssigned}"
+                                    illustrationType="sapIllus-NoEntries"
+                                    enableVerticalResponsiveness="true"
+                                />
+                            </table:noData>
+                        </table:Table>
+                    <!-- </content> -->
+                </Panel>
+            <!-- </VBox> -->
+        </content>
+    </Page>
+</mvc:View>

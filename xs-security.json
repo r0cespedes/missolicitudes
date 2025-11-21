@@ -1,0 +1,26 @@
+{
+  "xsappname": "missolicitudes",
+  "tenant-mode": "dedicated",
+  "description": "Security profile of called application",
+  "scopes": [
+    {
+      "name": "uaa.user",
+      "description": "UAA"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "Token_Exchange",
+      "description": "UAA",
+      "scope-references": [
+        "uaa.user"
+      ]
+    }
+  ],
+  "oauth2-configuration": { 
+    "redirect-uris": [ 
+      "https://*.cfapps.eu10.hana.ondemand.com/**",
+      "https://*.cfapps.eu10-004.hana.ondemand.com/login/callback"
+    ] 
+  } 
+}

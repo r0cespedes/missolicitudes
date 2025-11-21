@@ -1,0 +1,38 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+    <Dialog
+        id="commentDialog"
+        icon="{dialogViewModel>/icon}"
+        title="{dialogViewModel>/type}"
+        state="{dialogViewModel>/state}"
+        >
+
+        <content>
+            <VBox id="_IDGenVBox2" class="sapUiSmallMargin">
+                <Text id="dialogMessageText" text="{dialogViewModel>/message}" />
+                <Link id="_IDGenLink"
+                    class="sapUiTinyMarginTop"
+                    text="{i18n>addComment}"
+                    press=".onToggleComment" 
+                    visible="{dialogViewModel>/showAddCommentLink}"/>
+                <TextArea
+                    id="commentTextArea"
+                    width="100%"
+                    visible="false"
+                    class="sapUiTinyMarginTop"  
+                    rows="3"
+                />
+            </VBox>
+        </content>
+        <buttons>
+            <Button id="acceptButton"
+                    type="Emphasized"
+                    text="{dialogViewModel>/acceptText}"
+            />
+            <Button id="cancelButton"
+                    text="{dialogViewModel>/cancelText}"
+            />
+        </buttons>
+    </Dialog>
+</core:FragmentDefinition>
