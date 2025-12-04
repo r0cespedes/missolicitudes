@@ -795,12 +795,11 @@ sap.ui.define([
                 const oParametrosPicklist = {
                     bParam: true,
                     oParameter: {
-                        "$filter": `picklist/picklistId eq '${sPicklistId}' and status eq 'ACTIVE'`,
-                        "$expand": "picklistLabels",
+                        "$filter": `PickListV2_id eq '${sPicklistId}' and status eq 'A'`,
                         "$format": "json"
                     }
                 };
-                const sRutaEntidad = `/PicklistOption`;
+                const sRutaEntidad = `/PickListValueV2`;
                 const oRespuesta = await Service.readDataERP(sRutaEntidad, oModel, [], oParametrosPicklist);
 
                 const aOpciones = [];
@@ -811,20 +810,25 @@ sap.ui.define([
                     "en_DEBUG": "en_US"
                 };
                 const sLocaleBuscado = mMap[sLang];
+                const sCampoLabel = `label_${sLocaleBuscado}`;
 
                 if (oRespuesta.data?.results) {
                     oRespuesta.data.results.forEach(oOption => {
-                        const oLabelEncontrado = sLocaleBuscado
-                            ? oOption.picklistLabels.results.find(label => label.locale === sLocaleBuscado)
-                            : undefined;
-                        if (oLabelEncontrado) {
+                        let sTexto = oOption[sCampoLabel];
+
+                        if (!sTexto) {
+                            sTexto = oOption.label_defaultValue || oOption.label_en_US || oOption.externalCode;
+                        }
+
+                        if (sTexto) {
                             aOpciones.push({
-                                key: oLabelEncontrado.optionId,
-                                text: oLabelEncontrado.label
+                                key: oOption.optionId,
+                                text: sTexto
                             });
                         }
                     });
                 }
+
                 return aOpciones;
 
             } catch (oError) {
@@ -951,7 +955,7 @@ sap.ui.define([
                 }
 
                 const sLabel = Lenguaje.obtenerValorLocalizado(oDynamicField, "cust_etiqueta").replace(/:$/, "");
-                let sValue = oDynamicField.cust_fieldtype === "P" ? (oDynamicField.cust_label_value || "") : (oDynamicField.cust_value || "");
+                let sValue = oDynamicField.cust_value || "";
                 let sDisplayValue = sValue;
                 let aOpcionesPicklist = [];
 
@@ -971,7 +975,7 @@ sap.ui.define([
                     } else if (sValue !== "" && sValue.trim() !== "") {
                         try {
                             const aFilter = [new Filter("optionId", FilterOperator.EQ, sValue)];
-                            const data = await Service.readDataERP("/PicklistLabel", oModel, aFilter);
+                            const data = await Service.readDataERP("/PickListValueV2", oModel, aFilter);
 
                             const mMap = {
                                 "es_ES": "es_ES",
@@ -980,9 +984,11 @@ sap.ui.define([
                                 "en_DEBUG": "en_US"
                             };
                             const sLocaleBuscado = mMap[sLang];
+                            const sCampoLabel = `label_${sLocaleBuscado}`;
 
                             if (data?.data?.results?.length) {
-                                sDisplayValue = data.data.results.find(label => label.locale === sLocaleBuscado)?.label || sValue;
+                                const oResult = data.data.results[0];                                
+                                sDisplayValue = oResult[sCampoLabel] || oResult.label_defaultValue || "";
                             }
                         } catch (error) {
                             console.error("Error cargando picklist label:", error);
@@ -1309,8 +1315,7 @@ sap.ui.define([
 
             if (oFieldConfig.editable && oFieldConfig.picklistOptions && oFieldConfig.picklistOptions.length > 0) {
                 const oSelect = new Select({
-                    id: sFieldId,
-                    // width: oFieldConfig.length ? `${oFieldConfig.length}rem` : undefined,
+                    id: sFieldId,                    
                     selectedKey: oFieldConfig.realValue,
                     width: oFieldConfig.sDefaultWidth
                 });

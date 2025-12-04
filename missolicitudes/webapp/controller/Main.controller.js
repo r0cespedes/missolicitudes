@@ -1,6 +1,6 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
-    "sap/ui/model/json/JSONModel",  
+    "sap/ui/model/json/JSONModel",
     "sap/ui/model/Filter",
     "sap/ui/model/FilterOperator",
     "../dinamic/DinamicFields",
@@ -27,7 +27,7 @@ sap.ui.define([
         loadCurrentUser: async function () {
             await Util.getModelMainAndValidateSession(this);
             const sUrl = sap.ui.require.toUrl("com/inetum/missolicitudes") + "/user-api/currentUser";
-        
+
             fetch(sUrl)
                 .then(response => {
                     if (!response.ok) {
@@ -63,7 +63,7 @@ sap.ui.define([
             this.oCurrentUser = oViewUserModel.getData()[0];
             await this._loadAndSetUserModel();
             await this.onGetDM001();
-            
+
         },
 
 
@@ -226,8 +226,8 @@ sap.ui.define([
 
         clearAllFlters: function () {
             var oTable = this.byId("idRequestTable");
+            var oBinding = oTable.getBinding("rows");
 
-            oTable.getBinding()?.sort(null);
             var oUiModel = this.getView().getModel("mLocalModel");
             oUiModel.setProperty("/globalFilter", "");
             oUiModel.setProperty("/availabilityFilterOn", false);
@@ -239,6 +239,9 @@ sap.ui.define([
 
             this._resetSortingState();
 
+            var oSorter = new sap.ui.model.Sorter("cust_fechaSol", true); // true = descendente
+            oBinding.sort(oSorter);
+
         },
         /**
          * Quita el ordenamiento de cada columna en la tabla  
@@ -248,6 +251,7 @@ sap.ui.define([
             var aColumns = oTable.getColumns();
             for (var i = 0; i < aColumns.length; i++) {
                 aColumns[i].setSorted(false);
+                aColumns[i].setSortOrder("None");
             }
         },
 
@@ -308,7 +312,7 @@ sap.ui.define([
                     onAccept: this.onConfirmCancelacion.bind(this),
                     onCancel: this.onCancelComment.bind(this)
                 });
-                
+
                 console.log("Dialog aceptado:", result.comment);
             } catch (error) {
                 console.log("Dialog cancelado o cerrado");
@@ -382,14 +386,14 @@ sap.ui.define([
          */
         onCancelarSolicitudFromDetail: function (sNombreSol, sSolicitudId, sComment) {
             var that = this;
-            
+
             return new Promise(function (resolve, reject) {
-                try {         
-                    var bSuccess = that._cancelarSolicitudById(sSolicitudId, sComment);                    
-                    if (bSuccess) {                     
+                try {
+                    var bSuccess = that._cancelarSolicitudById(sSolicitudId, sComment);
+                    if (bSuccess) {
                         setTimeout(function () {
                             that.onGetDM001();
-                        }, 800);                        
+                        }, 800);
                         resolve(true);
                     } else {
                         reject(new Error("No se pudo cancelar la solicitud"));
@@ -414,7 +418,7 @@ sap.ui.define([
             if (iIndex >= 0) {
                 var oSolicitudCompleta = aSolicitudes[iIndex];
                 oModel.setProperty("/solicitudes/results/" + iIndex + "/cust_status", "Cancelado");
-                this.onChangeStatus(oSolicitudCompleta);        
+                this.onChangeStatus(oSolicitudCompleta);
                 oModel.refresh(sSolicitudId);
                 return true;
             }
