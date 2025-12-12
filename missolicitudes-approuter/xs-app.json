@@ -1,5 +1,28 @@
 {
   "authenticationMethod": "none",
-  "routes": [],
-  "welcomeFile": "/cominetummissolicitudes"
+  "welcomeFile": "/cominetummissolicitudes/index.html",
+  "logout": {
+    "logoutEndpoint": "/logout",
+    "logoutPage": "/cominetummissolicitudes/index.html"
+  },
+  "routes": [
+    {
+      "source": "^/logout$",
+      "target": "/logout",
+      "authenticationType": "xsuaa",
+      "service": "html5-apps-repo-rt"
+    },
+    {
+      "source": "^/user-api(.*)$",
+      "target": "$1",
+      "service": "sap-approuter-userapi",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/(.*)$",
+      "target": "$1",
+      "service": "html5-apps-repo-rt",
+      "authenticationType": "xsuaa"
+    }
+  ]
 }
