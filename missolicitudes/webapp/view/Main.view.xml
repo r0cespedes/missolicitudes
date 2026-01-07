@@ -262,12 +262,13 @@
                                 </table:Column>
                             </table:columns>
                             <table:noData>
-                                <IllustratedMessage
-                                    title="{i18n>noDataFound}"
-                                    description="{i18n>noRequestsAssigned}"
-                                    illustrationType="sapIllus-NoEntries"
-                                    enableVerticalResponsiveness="true"
-                                />
+                              <IllustratedMessage
+                                title="{i18n>noDataFound}"
+                                description="{i18n>noRequestsAssigned}"
+                                illustrationType="sapIllus-Scene-NoData"
+                                illustrationSize="Spot"
+                                enableVerticalResponsiveness="true"
+                            />
                             </table:noData>
                         </table:Table>
                     <!-- </content> -->
