@@ -100,7 +100,75 @@ sap.ui.define([
             if(oMainModel){
                 oMainModel.attachRequestFailed(this.onRequestFailed, this);
             }
-        }
+        },
+
+		getMapaBuzones: function() {
+			const MAPA = {
+				// Catalán
+				"Acció social": "recursoshumans@amb.cat",
+				"Formació": "formacio@amb.cat",
+				"Gestió de personal": "recursoshumans@amb.cat",
+				"Nòmina": "nomines@amb.cat",
+				
+				// Español
+				"Acción social": "recursoshumans@amb.cat",
+				"Formación": "formacio@amb.cat",
+				"Gestión de personal": "recursoshumans@amb.cat",
+				"Nómina": "nomines@amb.cat",
+				
+				// Inglés
+				"Social Action": "recursoshumans@amb.cat",
+				"Training": "formacio@amb.cat",
+				"Personnel Management": "recursoshumans@amb.cat",
+				"Payroll": "nomines@amb.cat",
+				
+				// Común en todos los idiomas
+				"PRL": "prevencio@amb.cat"
+			};
+			
+			return MAPA;
+		},
+
+		getMailByStep: function(sPasoActual) {
+			if(!sPasoActual) {
+				return null;
+			}
+			
+			const oMapaBuzones = this.getMapaBuzones();
+			const sPasoNormalizado = sPasoActual.toLowerCase().trim();
+			
+			// Buscar coincidencia exacta primero
+			if(oMapaBuzones[sPasoActual]) {
+				return oMapaBuzones[sPasoActual];
+			}
+			
+			// Si no, buscar ignorando mayúsculas
+			for(let key in oMapaBuzones) {
+				if(key.toLowerCase().trim() === sPasoNormalizado) {
+					return oMapaBuzones[key];
+				}
+			}
+			
+			return null;
+		},
+
+		getEmailValido: function(oUsuario) {
+			if(!oUsuario) {
+				return null;
+			}
+			
+			const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;			
+		
+			if (oUsuario.email && typeof oUsuario.email === 'string' && rEmailValidator.test(oUsuario.email.trim())) {
+				return oUsuario.email.trim();
+			}			
+			
+			if (oUsuario.username && typeof oUsuario.username === 'string' && rEmailValidator.test(oUsuario.username.trim())) {
+				return oUsuario.username.trim();
+			}
+			
+			return null;
+		},
 
 	};
 });

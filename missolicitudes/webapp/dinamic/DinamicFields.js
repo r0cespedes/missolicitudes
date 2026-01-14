@@ -109,6 +109,8 @@ sap.ui.define([
                     this._saveOriginalValues(aDynamicFields);
                 }
 
+                this.oSolicitudActual = oSolicitud;
+
                 // Crear la vista dinámica
                 var oDetailView = this._createDetailView(oSolicitud, aDynamicFields, bEditMode, this._oController);
 
@@ -325,6 +327,241 @@ sap.ui.define([
             return oDetailView;
         },
 
+        _getEmailStructure: async function () {
+
+            let sComment = this.sComment;            
+            const { to: aEmailsTO, cc: aEmailsCC } = await this.onGetEmailsForNotification();
+            const bEmailTO = aEmailsTO && aEmailsTO.length > 0;
+            const bEmailCC = aEmailsCC && aEmailsCC.length > 0;
+
+            if(!bEmailTO && !bEmailCC){
+                const sErrorMsg = "No se encontraron destinatarios válidos (TO y CC vacíos)";
+                console.error(sErrorMsg);               
+                return null;
+            }
+
+            let sBodyMessage = `${this.oResourceBundle.getText("mail.body.greeting")},\n\n`;
+            sBodyMessage += this.oResourceBundle.getText("mail.body.intro1", [this.oSolicitudActual.cust_nombreSol]);
+
+            if (sComment && sComment.trim().length > 0) {
+                sBodyMessage += this.oResourceBundle.getText("mail.body.commentFragment", [sComment.trim()]);
+            }
+
+            sBodyMessage += this.oResourceBundle.getText("mail.body.intro2");
+            sBodyMessage += `\n\n${this.oResourceBundle.getText("mail.body.closing")}`;
+
+            const sConvertBody = sBodyMessage.replaceAll("\n", "|");
+            const sSender = "notificaciones@inetum.com";
+            const sSubject = this.oResourceBundle.getText("mail.subject");
+
+            const oPayload = {
+                subject: sSubject,
+                mailBody: sConvertBody,
+                from: [
+                    { item: sSender }
+                ],
+                to: bEmailTO ? aEmailsTO.map(email => ({ item: email })) : [],
+                cc: bEmailCC ? aEmailsCC.map(email => ({ item: email })) : []
+            };
+
+            return oPayload;
+
+        },
+
+
+        onGetEmailsForNotification: async function () {
+            const oModel = this._oController.getOwnerComponent().getModel();
+            const sExternalCode = this.oSolicitudActual.externalCode;
+            const iAddIndexStep = (+this.oSolicitudActual.cust_indexStep) + 1;
+            const sIndexStep = `${iAddIndexStep}`;
+
+            try {
+                const oParametersDM0002 = {
+                    bParam: true,
+                    oParameter: {
+                        "$expand": "createdByNav, cust_aprobUserNav",
+                        "$format": "json",
+                        "$filter": `cust_INETUM_SOL_DM_0001_externalCode eq '${sExternalCode}'`,
+                        "$select": "cust_pasoActual,cust_seqStep,cust_aprobUserNav/userId,cust_aprobUserNav/email,cust_aprobUserNav/username"
+                    }
+                };
+
+                const { data } = await Service.readDataERP("/cust_INETUM_SOL_DM_0002", oModel, [], oParametersDM0002);
+
+                if (!data?.results) {
+                    return { to: [], cc: [] };
+                }
+
+                // ==================== EMAILS TO ====================
+                const setEmailsTO = new Set();
+
+                data.results.forEach(function (mResult) {
+                    if (mResult?.cust_pasoActual) {
+                        const sCorreoBuzon = Util.getMailByStep(mResult.cust_pasoActual);
+                        if (sCorreoBuzon) {
+                            setEmailsTO.add(sCorreoBuzon);
+                        }
+                    }
+                });
+                const aEmailsTO = Array.from(setEmailsTO);
+
+                // ==================== EMAILS CC ====================
+                const aResultsCC = data.results.filter(oCampo =>
+                    oCampo.cust_seqStep === sIndexStep
+                );
+
+                // Extraer los userIds que necesitamos consultar
+                const aUserIds = [];
+                aResultsCC.forEach(function (mResult) {
+                    if (mResult?.cust_aprobUserNav?.userId) {
+                        aUserIds.push(mResult.cust_aprobUserNav.userId);
+                    }
+                });
+
+                // Consultar emails reales desde la entidad User
+                let aEmailsCC = [];
+
+                if (aUserIds.length > 0) {
+                    // Crear filtros OR para consultar múltiples usuarios
+                    const aSubFilters = aUserIds.map(id =>
+                        new sap.ui.model.Filter("userId", sap.ui.model.FilterOperator.EQ, id)
+                    );
+                    const oFilterOR = new sap.ui.model.Filter(aSubFilters, false);
+
+                    const oParamUser = {
+                        bParam: true,
+                        oParameter: {
+                            "$select": "userId,email,username"
+                        }
+                    };
+
+                    // Regex para validar formato de correo
+                    const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+                    const setEmailsCC = new Set();
+                    const aUsuariosSinCorreo = [];
+
+                    try {
+                        const oResponseUser = await Service.readDataERP("/User", oModel, [oFilterOR], oParamUser);
+                        const aUsuariosEncontrados = oResponseUser.data.results || [];
+
+                        // Mapear usuarios encontrados por userId
+                        const mUsuariosMap = new Map(aUsuariosEncontrados.map(u => [u.userId, u]));
+
+                        // Validar y extraer emails
+                        aUserIds.forEach(sSolicitadoId => {
+                            const oUsuario = mUsuariosMap.get(sSolicitadoId);
+
+                            if (!oUsuario) {
+                                aUsuariosSinCorreo.push(`${sSolicitadoId} (No encontrado)`);
+                                return;
+                            }
+
+                            let sEmailCandidato = null;
+
+                            // Validar si email o username tienen formato válido
+                            if (oUsuario.email && rEmailValidator.test(oUsuario.email)) {
+                                sEmailCandidato = oUsuario.email;
+                            }
+                            else if (oUsuario.username && rEmailValidator.test(oUsuario.username)) {
+                                sEmailCandidato = oUsuario.username;
+                            }
+
+                            if (sEmailCandidato) {
+                                setEmailsCC.add(sEmailCandidato);
+                            } else {
+                                aUsuariosSinCorreo.push(`${sSolicitadoId} (Sin formato válido)`);
+                            }
+                        });
+
+                        if (aUsuariosSinCorreo.length > 0) {
+                            console.warn("Usuarios sin correo válido:", aUsuariosSinCorreo);
+                        }
+
+                        aEmailsCC = Array.from(setEmailsCC);
+
+                    } catch (errorUser) {
+                        console.error("Error al consultar emails en entidad User:", errorUser);
+                        // En caso de error, intentar usar los emails del expand original
+                        aEmailsCC = this._getFallbackEmails(aResultsCC);
+                    }
+                }
+
+                Util.onShowMessage("Emails cargados correctamente", 'toast');
+
+                return {
+                    to: aEmailsTO,
+                    cc: aEmailsCC
+                };
+
+            } catch (error) {
+                console.error("Error al cargar emails para notificación:", error.message || error);
+                return { to: [], cc: [] };
+            } finally {
+                Util.showBI(false);
+            }
+        },
+
+        // Método auxiliar por si falla la consulta a User
+        _getFallbackEmails: function (aResultsCC) {
+            const setEmailsCC = new Set();
+
+            aResultsCC.forEach(function (mResult) {
+                if (mResult?.cust_aprobUserNav) {
+                    const sEmailValido = Util.getEmailValido(mResult.cust_aprobUserNav);
+                    if (sEmailValido) {
+                        setEmailsCC.add(sEmailValido);
+                    }
+                }
+            });
+
+            return Array.from(setEmailsCC);
+        },
+
+        onSendEmail: async function () {
+
+            const sAppPath = this._oController._getAppModulePath
+                ? this._oController._getAppModulePath()
+                : this._getAppModulePath();
+
+            const sUrl = sAppPath + "/cpi/BTP-ECP_Mail";
+            const oPayload = await this._getEmailStructure();
+
+            try {
+                Util.showBI(true);
+
+                const response = await fetch(sUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(oPayload)
+                });
+
+                sap.ui.core.BusyIndicator.hide();
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const data = await response.json().catch(() => response.text());
+                console.log("Respuesta:", data);
+
+                // return data;
+
+            } catch (error) {
+                Util.showBI(false);
+                console.error("Error al enviar correo:", error);
+                throw error;
+            }
+        },
+
+        _getAppModulePath: function () {
+            const appId = this._oController.getOwnerComponent().getManifestEntry("/sap.app/id");
+            const appPath = appId.replaceAll(".", "/");
+            return jQuery.sap.getModulePath(appPath);
+        },
+
         _onSaveChanges: function (oSolicitud, oDetailView) {
             var that = this;
 
@@ -356,6 +593,7 @@ sap.ui.define([
             DialogManager.open(this._oMainView, oDialogModel, {
                 onAccept: function (sComment) {
                     that._performSave(oSolicitud, oDetailView, aChangedFields, oAttachmentChange);
+                    that.sComment = sComment;
                 },
                 onCancel: function () {
                     console.log("Guardado cancelado por el usuario");
@@ -365,7 +603,7 @@ sap.ui.define([
             });
         },
 
-        _performSave: function (oSolicitud, oDetailView, aChangedFields, aAttachmentChanges) {
+        _performSave: function (oSolicitud, oDetailView, aChangedFields, aAttachmentChanges, sComment) {
             var that = this;
             Util.showBI(true);
             const oModel = this._oController.getOwnerComponent().getModel();
@@ -612,7 +850,7 @@ sap.ui.define([
         },
 
 
-        _finalizeUpdate: function (oSolicitud, oDetailView) {
+        _finalizeUpdate: async function (oSolicitud, oDetailView) {
             var that = this;
             const oModel = this._oController.getOwnerComponent().getModel();
 
@@ -642,15 +880,19 @@ sap.ui.define([
                 cust_fechaAct: new Date()
             };
 
+            // Comentado provisionalmente mientras se hacen las pruebas
+
             oModel.update(sEntityPath, oDatos_DM_0001, {
-                success: function () {
-                    console.log("DM_0001 Actualizado")
-                },
-                error: function (oError) {
-                    console.log("Error al guardar cambios", "error");
-                    Util.showBI(false);
-                }
-            });
+                 success: function () {
+                     console.log("DM_0001 Actualizado")
+                 },
+                 error: function (oError) {
+                     console.log("Error al guardar cambios", "error");
+                     Util.showBI(false);
+                 }
+             });
+
+            await this.onSendEmail();
 
             oSolicitud.cust_indexStep = iNewIndexStep;
             that.onSearchSteps(oSolicitud, iNewIndexStep);
@@ -832,7 +1074,7 @@ sap.ui.define([
                 return aOpciones;
 
             } catch (oError) {
-                const oResourceBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+                const oResourceBundle = this._oController.getOwnerComponent().getModel("i18n").getResourceBundle();
                 console.warn(oResourceBundle.getText("warn.picklistLoadFailed", [sPicklistId]), oError);
                 return [];
             }
@@ -987,7 +1229,7 @@ sap.ui.define([
                             const sCampoLabel = `label_${sLocaleBuscado}`;
 
                             if (data?.data?.results?.length) {
-                                const oResult = data.data.results[0];                                
+                                const oResult = data.data.results[0];
                                 sDisplayValue = oResult[sCampoLabel] || oResult.label_defaultValue || "";
                             }
                         } catch (error) {
@@ -1315,7 +1557,7 @@ sap.ui.define([
 
             if (oFieldConfig.editable && oFieldConfig.picklistOptions && oFieldConfig.picklistOptions.length > 0) {
                 const oSelect = new Select({
-                    id: sFieldId,                    
+                    id: sFieldId,
                     selectedKey: oFieldConfig.realValue,
                     width: oFieldConfig.sDefaultWidth
                 });
@@ -1690,7 +1932,7 @@ sap.ui.define([
                 type: this.oResourceBundle.getText("confirmCancel"),
                 state: "Warning",
                 message: this.oResourceBundle.getText("cancelRequestConfirmation", [oSolicitud.cust_nombreSol]),
-                acceptText: this.oResourceBundle.getText("aceptar"),
+                acceptText: this.oResourceBundle.getText("continue"),
                 cancelText: this.oResourceBundle.getText("cancel"),
                 showAddCommentLink: true
             });

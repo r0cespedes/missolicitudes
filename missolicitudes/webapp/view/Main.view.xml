@@ -262,13 +262,22 @@
                                 </table:Column>
                             </table:columns>
                             <table:noData>
-                              <IllustratedMessage
-                                title="{i18n>noDataFound}"
-                                description="{i18n>noRequestsAssigned}"
-                                illustrationType="sapIllus-Scene-NoData"
-                                illustrationSize="Spot"
-                                enableVerticalResponsiveness="true"
-                            />
+                             <VBox 
+                                alignItems="Center" 
+                                justifyContent="Center"
+                                height="100%"
+                            >
+                                <Title 
+                                    text="{i18n>noDataFound}"
+                                    level="H1"
+                                    textAlign="Center"
+                                />
+                                <Text 
+                                    text="{i18n>noRequestsAssigned}"
+                                    class="sapUiTinyMarginTop"
+                                    textAlign="Center"
+                                />
+                            </VBox>
                             </table:noData>
                         </table:Table>
                     <!-- </content> -->

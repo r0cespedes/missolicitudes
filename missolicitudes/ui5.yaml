@@ -16,6 +16,10 @@ server:
             - /test-resources
           url: https://ui5.sap.com
         backend:
+          - path: /cpi
+            url: https://integration-suite-desarrollo-zseo5ntm.it-cpi026-rt.cfapps.eu10-002.hana.ondemand.com
+            destination: IntegrationSuiteDev
+            pathPrefix: /http/des
           - path: /odata
             url: https://api55.sapsf.eu
             destination: sfextenareametropD
