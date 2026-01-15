@@ -329,14 +329,14 @@ sap.ui.define([
 
         _getEmailStructure: async function () {
 
-            let sComment = this.sComment;            
+            let sComment = this.sComment;
             const { to: aEmailsTO, cc: aEmailsCC } = await this.onGetEmailsForNotification();
             const bEmailTO = aEmailsTO && aEmailsTO.length > 0;
             const bEmailCC = aEmailsCC && aEmailsCC.length > 0;
 
-            if(!bEmailTO && !bEmailCC){
+            if (!bEmailTO && !bEmailCC) {
                 const sErrorMsg = "No se encontraron destinatarios válidos (TO y CC vacíos)";
-                console.error(sErrorMsg);               
+                console.error(sErrorMsg);
                 return null;
             }
 
@@ -392,17 +392,36 @@ sap.ui.define([
                     return { to: [], cc: [] };
                 }
 
-                // ==================== EMAILS TO ====================
+               
                 const setEmailsTO = new Set();
-
-                data.results.forEach(function (mResult) {
+               
+                for (const mResult of data.results) {
                     if (mResult?.cust_pasoActual) {
-                        const sCorreoBuzon = Util.getMailByStep(mResult.cust_pasoActual);
+
+                        // Intentar obtener email del mapa de buzones directamente
+                        let sCorreoBuzon = Util.getMailByStep(mResult.cust_pasoActual);
+
+                        // Si encontró el email en el mapa, agregarlo
                         if (sCorreoBuzon) {
-                            setEmailsTO.add(sCorreoBuzon);
+                            setEmailsTO.add(sCorreoBuzon);                            
+                        } else {                        
+                            const oValidacion = await this._validarPasoEnC0006(mResult.cust_pasoActual);
+
+                            if (oValidacion.found) {
+                                // El paso existe en C_0006, buscar email del rol                                
+                                const sEmailRol = await this._getEmailFromRole(mResult.cust_pasoActual);
+                                if (sEmailRol) {
+                                    setEmailsTO.add(sEmailRol);                                    
+                                } else {
+                                    console.warn(`No se encontró email para el rol: ${mResult.cust_pasoActual}`);
+                                }
+                            } else {
+                                console.warn(`Paso "${mResult.cust_pasoActual}" no encontrado en C_0006 ni en mapa de buzones`);
+                            }
                         }
                     }
-                });
+                }
+
                 const aEmailsTO = Array.from(setEmailsTO);
 
                 // ==================== EMAILS CC ====================
@@ -422,72 +441,9 @@ sap.ui.define([
                 let aEmailsCC = [];
 
                 if (aUserIds.length > 0) {
-                    // Crear filtros OR para consultar múltiples usuarios
-                    const aSubFilters = aUserIds.map(id =>
-                        new sap.ui.model.Filter("userId", sap.ui.model.FilterOperator.EQ, id)
-                    );
-                    const oFilterOR = new sap.ui.model.Filter(aSubFilters, false);
-
-                    const oParamUser = {
-                        bParam: true,
-                        oParameter: {
-                            "$select": "userId,email,username"
-                        }
-                    };
-
-                    // Regex para validar formato de correo
-                    const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
-                    const setEmailsCC = new Set();
-                    const aUsuariosSinCorreo = [];
-
-                    try {
-                        const oResponseUser = await Service.readDataERP("/User", oModel, [oFilterOR], oParamUser);
-                        const aUsuariosEncontrados = oResponseUser.data.results || [];
-
-                        // Mapear usuarios encontrados por userId
-                        const mUsuariosMap = new Map(aUsuariosEncontrados.map(u => [u.userId, u]));
-
-                        // Validar y extraer emails
-                        aUserIds.forEach(sSolicitadoId => {
-                            const oUsuario = mUsuariosMap.get(sSolicitadoId);
-
-                            if (!oUsuario) {
-                                aUsuariosSinCorreo.push(`${sSolicitadoId} (No encontrado)`);
-                                return;
-                            }
-
-                            let sEmailCandidato = null;
-
-                            // Validar si email o username tienen formato válido
-                            if (oUsuario.email && rEmailValidator.test(oUsuario.email)) {
-                                sEmailCandidato = oUsuario.email;
-                            }
-                            else if (oUsuario.username && rEmailValidator.test(oUsuario.username)) {
-                                sEmailCandidato = oUsuario.username;
-                            }
-
-                            if (sEmailCandidato) {
-                                setEmailsCC.add(sEmailCandidato);
-                            } else {
-                                aUsuariosSinCorreo.push(`${sSolicitadoId} (Sin formato válido)`);
-                            }
-                        });
-
-                        if (aUsuariosSinCorreo.length > 0) {
-                            console.warn("Usuarios sin correo válido:", aUsuariosSinCorreo);
-                        }
-
-                        aEmailsCC = Array.from(setEmailsCC);
-
-                    } catch (errorUser) {
-                        console.error("Error al consultar emails en entidad User:", errorUser);
-                        // En caso de error, intentar usar los emails del expand original
-                        aEmailsCC = this._getFallbackEmails(aResultsCC);
-                    }
+                    aEmailsCC = await this._getEmailsFromUsers(aUserIds);
                 }
-
-                Util.onShowMessage("Emails cargados correctamente", 'toast');
-
+              
                 return {
                     to: aEmailsTO,
                     cc: aEmailsCC
@@ -501,20 +457,181 @@ sap.ui.define([
             }
         },
 
-        // Método auxiliar por si falla la consulta a User
-        _getFallbackEmails: function (aResultsCC) {
-            const setEmailsCC = new Set();
+        /**
+         * Valida si el paso actual existe en la entidad C_0006
+         * @param {string} sPasoActual - Valor del paso actual (externalCode)
+         * @returns {Promise<Object>} { found: boolean, data: object|null }
+         */
+        _validarPasoEnC0006: async function (sPasoActual) {
+            if (!sPasoActual) {
+                return { found: false, data: null };
+            }
 
-            aResultsCC.forEach(function (mResult) {
-                if (mResult?.cust_aprobUserNav) {
-                    const sEmailValido = Util.getEmailValido(mResult.cust_aprobUserNav);
-                    if (sEmailValido) {
-                        setEmailsCC.add(sEmailValido);
+            const oModel = this._oController.getOwnerComponent().getModel();
+
+            try {
+                const oParameters = {
+                    bParam: true,
+                    oParameter: {
+                        "$format": "json",
+                        "$filter": `externalCode eq '${sPasoActual}'`,
+                        "$select": "externalCode,externalName"
                     }
-                }
-            });
+                };
 
-            return Array.from(setEmailsCC);
+                const { data } = await Service.readDataERP("/cust_INETUM_SOL_C_0006", oModel, [], oParameters);
+
+                if (data?.results && data.results.length > 0) {
+                    return {
+                        found: true,
+                        data: data.results[0]
+                    };
+                } else {
+                    return {
+                        found: false,
+                        data: null
+                    };
+                }
+
+            } catch (error) {
+                console.error("Error al validar paso en C_0006:", error);
+                return {
+                    found: false,
+                    data: null
+                };
+            }
+        },
+
+        /**
+         * Obtiene el email asociado a un rol desde C_0006
+         * @param {string} sPasoActual - Nombre del paso/rol (externalCode de C_0006)
+         * @returns {Promise<string|null>} Email del rol o null
+         */
+        _getEmailFromRole: async function (sPasoActual) {
+            if (!sPasoActual) {
+                return null;
+            }
+
+            const oModel = this._oController.getOwnerComponent().getModel();
+            const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+
+            try {
+                const oParameters = {
+                    bParam: true,
+                    oParameter: {
+                        "$format": "json",
+                        "$filter": `externalCode eq '${sPasoActual}'`,
+                        "$expand": "cust_INETUM_SOL_C_0009,cust_INETUM_SOL_C_0009/cust_userNav",
+                        "$select": "externalCode,externalName,cust_INETUM_SOL_C_0009/cust_user,cust_INETUM_SOL_C_0009/cust_userNav/email,cust_INETUM_SOL_C_0009/cust_userNav/username"
+                    }
+                };
+
+                const { data } = await Service.readDataERP("/cust_INETUM_SOL_C_0006",oModel, [], oParameters);
+
+                if (data?.results && data.results.length > 0) {
+                    const oRol = data.results[0];
+
+                    // Verificar si tiene la navegación C_0009
+                    if (oRol.cust_INETUM_SOL_C_0009?.results && oRol.cust_INETUM_SOL_C_0009.results.length > 0) {
+
+                        const setEmails = new Set();
+
+                        // Recorrer todos los usuarios asociados al rol
+                        oRol.cust_INETUM_SOL_C_0009.results.forEach(oC0009 => {
+                            if (oC0009.cust_userNav) {
+                                const oUser = oC0009.cust_userNav;
+
+                                // Prioridad: email, luego username
+                                if (oUser.email && rEmailValidator.test(oUser.email)) {
+                                    setEmails.add(oUser.email.toUpperCase()); 
+                                } else if (oUser.username && rEmailValidator.test(oUser.username)) {
+                                    setEmails.add(oUser.username.toLowerCase()); 
+                                }
+                            }
+                        });
+
+                        // Retorna el primer email encontrado
+                        // Si se requiere  TODOS los emails, cambiar a: return Array.from(setEmails)
+                        if (setEmails.size > 0) {
+                            const aEmails = Array.from(setEmails);                            
+                            return aEmails[0]; // Array.from(setEmails)
+                        }
+                    }
+
+                    console.warn(`Rol "${sPasoActual}" encontrado pero sin usuarios o emails asociados`);
+                    return null;
+                }
+
+                console.warn(`Rol "${sPasoActual}" no encontrado en C_0006`);
+                return null;
+
+            } catch (error) {
+                console.error(`Error al obtener email del rol "${sPasoActual}":`, error);
+                return null;
+            }
+        },
+
+        /**
+         * Obtiene emails de usuarios desde la entidad User
+         * @param {Array<string>} aUserIds - Array de IDs de usuario
+         * @returns {Promise<Array<string>>} Array de emails válidos
+         */
+        _getEmailsFromUsers: async function (aUserIds) {
+            if (!aUserIds || aUserIds.length === 0) return [];
+
+            const oModel = this._oController.getOwnerComponent().getModel();
+
+            try {
+                const aSubFilters = aUserIds.map(id =>
+                    new sap.ui.model.Filter("userId", sap.ui.model.FilterOperator.EQ, id)
+                );
+                const oFilterOR = new sap.ui.model.Filter(aSubFilters, false);
+
+                const oParam = {
+                    bParam: true,
+                    oParameter: {
+                        "$select": "userId,email,username"
+                    }
+                };
+
+                const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+                const setEmailsCC = new Set();
+
+                const oResponse = await Service.readDataERP("/User", oModel, [oFilterOR], oParam);
+                const aUsuariosEncontrados = oResponse.data.results || [];
+
+                const mUsuariosMap = new Map(aUsuariosEncontrados.map(u => [u.userId, u]));
+
+                aUserIds.forEach(sSolicitadoId => {
+                    const oUsuario = mUsuariosMap.get(sSolicitadoId);
+
+                    if (!oUsuario) {
+                        console.warn(`Usuario no encontrado: ${sSolicitadoId}`);
+                        return;
+                    }
+
+                    let sEmailCandidato = null;
+
+                    if (oUsuario.email && rEmailValidator.test(oUsuario.email)) {
+                        sEmailCandidato = oUsuario.email;
+                    }
+                    else if (oUsuario.username && rEmailValidator.test(oUsuario.username)) {
+                        sEmailCandidato = oUsuario.username;
+                    }
+
+                    if (sEmailCandidato) {
+                        setEmailsCC.add(sEmailCandidato);
+                    } else {
+                        console.warn(`Usuario sin correo válido: ${sSolicitadoId}`);
+                    }
+                });
+
+                return Array.from(setEmailsCC);
+
+            } catch (error) {
+                console.error("Error en _getEmailsFromUsers:", error);
+                return [];
+            }
         },
 
         onSendEmail: async function () {
@@ -883,14 +1000,14 @@ sap.ui.define([
             // Comentado provisionalmente mientras se hacen las pruebas
 
             oModel.update(sEntityPath, oDatos_DM_0001, {
-                 success: function () {
-                     console.log("DM_0001 Actualizado")
-                 },
-                 error: function (oError) {
-                     console.log("Error al guardar cambios", "error");
-                     Util.showBI(false);
-                 }
-             });
+                success: function () {
+                    console.log("DM_0001 Actualizado")
+                },
+                error: function (oError) {
+                    console.log("Error al guardar cambios", "error");
+                    Util.showBI(false);
+                }
+            });
 
             await this.onSendEmail();
 
@@ -1932,7 +2049,7 @@ sap.ui.define([
                 type: this.oResourceBundle.getText("confirmCancel"),
                 state: "Warning",
                 message: this.oResourceBundle.getText("cancelRequestConfirmation", [oSolicitud.cust_nombreSol]),
-                acceptText: this.oResourceBundle.getText("continue"),
+                acceptText: this.oResourceBundle.getText("confirm"),
                 cancelText: this.oResourceBundle.getText("cancel"),
                 showAddCommentLink: true
             });

@@ -302,7 +302,7 @@ sap.ui.define([
                 type: this.oResourceBundle.getText("confirmCancel"),
                 state: "Warning",
                 message: this.oResourceBundle.getText("cancelRequestConfirmation", [this._sSolicitudId]),
-                acceptText: this.oResourceBundle.getText("continue"),
+                acceptText: this.oResourceBundle.getText("confirm"),
                 cancelText: this.oResourceBundle.getText("cancel"),
                 showAddCommentLink: true
             });
