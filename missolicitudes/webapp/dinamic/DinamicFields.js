@@ -992,21 +992,21 @@ sap.ui.define([
 
             // Comentado provisionalmente mientras se hacen las pruebas
 
-            // oModel.update(sEntityPath, oDatos_DM_0001, {
-            //     success: function () {
-            //         console.log("DM_0001 Actualizado")
-            //     },
-            //     error: function (oError) {
-            //         console.log("Error al guardar cambios", "error");
-            //         Util.showBI(false);
-            //     }
-            // });
+            oModel.update(sEntityPath, oDatos_DM_0001, {
+                success: function () {
+                    console.log("DM_0001 Actualizado")
+                },
+                error: function (oError) {
+                    console.log("Error al guardar cambios", "error");
+                    Util.showBI(false);
+                }
+            });
 
             await this.onSendEmail();
 
-            // oSolicitud.cust_indexStep = iNewIndexStep;
-            // that.onSearchSteps(oSolicitud, iNewIndexStep);
-            // that._oController._archivosParaSubir = null;
+            oSolicitud.cust_indexStep = iNewIndexStep;
+            that.onSearchSteps(oSolicitud, iNewIndexStep);
+            that._oController._archivosParaSubir = null;
 
             MessageToast.show(that.oResourceBundle.getText("ChangesSavedSuccessfully"));
             that._onBackToMain(oDetailView);
