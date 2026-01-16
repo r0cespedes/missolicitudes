@@ -392,31 +392,39 @@ sap.ui.define([
                     return { to: [], cc: [] };
                 }
 
-               
+
                 const setEmailsTO = new Set();
-               
+
                 for (const mResult of data.results) {
                     if (mResult?.cust_pasoActual) {
 
                         // Intentar obtener email del mapa de buzones directamente
                         let sCorreoBuzon = Util.getMailByStep(mResult.cust_pasoActual);
-
                         // Si encontró el email en el mapa, agregarlo
                         if (sCorreoBuzon) {
-                            setEmailsTO.add(sCorreoBuzon);                            
-                        } else {                        
+                            setEmailsTO.add(sCorreoBuzon);
+                        } else {
                             const oValidacion = await this._validarPasoEnC0006(mResult.cust_pasoActual);
 
                             if (oValidacion.found) {
                                 // El paso existe en C_0006, buscar email del rol                                
-                                const sEmailRol = await this._getEmailFromRole(mResult.cust_pasoActual);
-                                if (sEmailRol) {
-                                    setEmailsTO.add(sEmailRol);                                    
+                                const aEmailRol = await this._getEmailFromRole(mResult.cust_pasoActual);
+                                if (aEmailRol.length > 0) {
+
+                                    aEmailRol.forEach(function (mEmailRol) {
+                                        setEmailsTO.add(mEmailRol);
+                                    });
+
                                 } else {
                                     console.warn(`No se encontró email para el rol: ${mResult.cust_pasoActual}`);
                                 }
-                            } else {
-                                console.warn(`Paso "${mResult.cust_pasoActual}" no encontrado en C_0006 ni en mapa de buzones`);
+                            } else {                               
+
+                                if (mResult?.cust_aprobUserNav?.email) {
+                                    setEmailsTO.add(mResult.cust_aprobUserNav.email);
+                                } else {
+                                    console.warn(`No se encontró email válido para agregar`);
+                                }
                             }
                         }
                     }
@@ -443,7 +451,7 @@ sap.ui.define([
                 if (aUserIds.length > 0) {
                     aEmailsCC = await this._getEmailsFromUsers(aUserIds);
                 }
-              
+
                 return {
                     to: aEmailsTO,
                     cc: aEmailsCC
@@ -474,7 +482,7 @@ sap.ui.define([
                     bParam: true,
                     oParameter: {
                         "$format": "json",
-                        "$filter": `externalCode eq '${sPasoActual}'`,
+                        "$filter": `externalName eq '${sPasoActual}'`,
                         "$select": "externalCode,externalName"
                     }
                 };
@@ -513,20 +521,19 @@ sap.ui.define([
             }
 
             const oModel = this._oController.getOwnerComponent().getModel();
-            const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
-
+            
             try {
                 const oParameters = {
                     bParam: true,
                     oParameter: {
                         "$format": "json",
-                        "$filter": `externalCode eq '${sPasoActual}'`,
+                        "$filter": `externalName eq '${sPasoActual}'`,
                         "$expand": "cust_INETUM_SOL_C_0009,cust_INETUM_SOL_C_0009/cust_userNav",
                         "$select": "externalCode,externalName,cust_INETUM_SOL_C_0009/cust_user,cust_INETUM_SOL_C_0009/cust_userNav/email,cust_INETUM_SOL_C_0009/cust_userNav/username"
                     }
                 };
 
-                const { data } = await Service.readDataERP("/cust_INETUM_SOL_C_0006",oModel, [], oParameters);
+                const { data } = await Service.readDataERP("/cust_INETUM_SOL_C_0006", oModel, [], oParameters);
 
                 if (data?.results && data.results.length > 0) {
                     const oRol = data.results[0];
@@ -539,22 +546,16 @@ sap.ui.define([
                         // Recorrer todos los usuarios asociados al rol
                         oRol.cust_INETUM_SOL_C_0009.results.forEach(oC0009 => {
                             if (oC0009.cust_userNav) {
-                                const oUser = oC0009.cust_userNav;
-
-                                // Prioridad: email, luego username
-                                if (oUser.email && rEmailValidator.test(oUser.email)) {
-                                    setEmails.add(oUser.email.toUpperCase()); 
-                                } else if (oUser.username && rEmailValidator.test(oUser.username)) {
-                                    setEmails.add(oUser.username.toLowerCase()); 
+                                const sEmailValido = Util.getEmailValido(oC0009.cust_userNav);
+                                if (sEmailValido) {
+                                    setEmails.add(sEmailValido);
                                 }
                             }
                         });
 
-                        // Retorna el primer email encontrado
-                        // Si se requiere  TODOS los emails, cambiar a: return Array.from(setEmails)
                         if (setEmails.size > 0) {
-                            const aEmails = Array.from(setEmails);                            
-                            return aEmails[0]; // Array.from(setEmails)
+                            const aEmails = Array.from(setEmails);
+                            return aEmails; // Array.from(setEmails)
                         }
                     }
 
@@ -594,7 +595,6 @@ sap.ui.define([
                     }
                 };
 
-                const rEmailValidator = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
                 const setEmailsCC = new Set();
 
                 const oResponse = await Service.readDataERP("/User", oModel, [oFilterOR], oParam);
@@ -610,17 +610,10 @@ sap.ui.define([
                         return;
                     }
 
-                    let sEmailCandidato = null;
+                    const sEmailValido = Util.getEmailValido(oUsuario);
 
-                    if (oUsuario.email && rEmailValidator.test(oUsuario.email)) {
-                        sEmailCandidato = oUsuario.email;
-                    }
-                    else if (oUsuario.username && rEmailValidator.test(oUsuario.username)) {
-                        sEmailCandidato = oUsuario.username;
-                    }
-
-                    if (sEmailCandidato) {
-                        setEmailsCC.add(sEmailCandidato);
+                    if (sEmailValido) {
+                        setEmailsCC.add(sEmailValido);
                     } else {
                         console.warn(`Usuario sin correo válido: ${sSolicitadoId}`);
                     }
@@ -999,21 +992,21 @@ sap.ui.define([
 
             // Comentado provisionalmente mientras se hacen las pruebas
 
-            oModel.update(sEntityPath, oDatos_DM_0001, {
-                success: function () {
-                    console.log("DM_0001 Actualizado")
-                },
-                error: function (oError) {
-                    console.log("Error al guardar cambios", "error");
-                    Util.showBI(false);
-                }
-            });
+            // oModel.update(sEntityPath, oDatos_DM_0001, {
+            //     success: function () {
+            //         console.log("DM_0001 Actualizado")
+            //     },
+            //     error: function (oError) {
+            //         console.log("Error al guardar cambios", "error");
+            //         Util.showBI(false);
+            //     }
+            // });
 
             await this.onSendEmail();
 
-            oSolicitud.cust_indexStep = iNewIndexStep;
-            that.onSearchSteps(oSolicitud, iNewIndexStep);
-            that._oController._archivosParaSubir = null;
+            // oSolicitud.cust_indexStep = iNewIndexStep;
+            // that.onSearchSteps(oSolicitud, iNewIndexStep);
+            // that._oController._archivosParaSubir = null;
 
             MessageToast.show(that.oResourceBundle.getText("ChangesSavedSuccessfully"));
             that._onBackToMain(oDetailView);
