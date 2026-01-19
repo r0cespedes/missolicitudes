@@ -392,41 +392,39 @@ sap.ui.define([
                     return { to: [], cc: [] };
                 }
 
+                // ==================== EMAILS TO ===================    
 
                 const setEmailsTO = new Set();
 
                 for (const mResult of data.results) {
-                    if (mResult?.cust_pasoActual) {
+                    const sPasoActual = mResult?.cust_pasoActual;
+                    if (!sPasoActual) continue;
 
-                        // Intentar obtener email del mapa de buzones directamente
-                        let sCorreoBuzon = Util.getMailByStep(mResult.cust_pasoActual);
-                        // Si encontró el email en el mapa, agregarlo
-                        if (sCorreoBuzon) {
-                            setEmailsTO.add(sCorreoBuzon);
+                    // Intenta obtener email del mapa de buzones
+                    const sCorreoBuzon = Util.getMailByStep(sPasoActual);
+                    if (sCorreoBuzon) {
+                        setEmailsTO.add(sCorreoBuzon);
+                        continue;
+                    }
+
+                    // Valida si el paso existe en C_0006
+                    const oValidacion = await this._validarPasoEnC0006(sPasoActual);
+                    if (oValidacion.found) {
+                        const aEmailRol = await this._getEmailFromRole(sPasoActual);
+                        if (aEmailRol.length > 0) {
+                            aEmailRol.forEach(email => setEmailsTO.add(email));
                         } else {
-                            const oValidacion = await this._validarPasoEnC0006(mResult.cust_pasoActual);
-
-                            if (oValidacion.found) {
-                                // El paso existe en C_0006, buscar email del rol                                
-                                const aEmailRol = await this._getEmailFromRole(mResult.cust_pasoActual);
-                                if (aEmailRol.length > 0) {
-
-                                    aEmailRol.forEach(function (mEmailRol) {
-                                        setEmailsTO.add(mEmailRol);
-                                    });
-
-                                } else {
-                                    console.warn(`No se encontró email para el rol: ${mResult.cust_pasoActual}`);
-                                }
-                            } else {                               
-
-                                if (mResult?.cust_aprobUserNav?.email) {
-                                    setEmailsTO.add(mResult.cust_aprobUserNav.email);
-                                } else {
-                                    console.warn(`No se encontró email válido para agregar`);
-                                }
-                            }
+                            console.warn(`No se encontró email para el rol: ${sPasoActual}`);
                         }
+                        continue;
+                    }
+
+                    // Email del usuario aprobador
+                    const sEmailAprobador = mResult?.cust_aprobUserNav?.email;
+                    if (sEmailAprobador) {
+                        setEmailsTO.add(sEmailAprobador);
+                    } else {
+                        console.warn(`No se encontró email válido para el paso: ${sPasoActual}`);
                     }
                 }
 
@@ -521,7 +519,7 @@ sap.ui.define([
             }
 
             const oModel = this._oController.getOwnerComponent().getModel();
-            
+
             try {
                 const oParameters = {
                     bParam: true,
