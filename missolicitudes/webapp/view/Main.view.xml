@@ -6,6 +6,7 @@
     xmlns:core="sap.ui.core"
     xmlns:table="sap.ui.table"
     xmlns:rm="sap.ui.table.rowmodes"
+    xmlns:unified="sap.ui.unified"
     height="100%"
 >
     <Page
@@ -132,6 +133,7 @@
                                 </table:Column>
 
                                 <!-- Columna: Fecha de Solicitud -->
+                                <!--
                                 <table:Column
                                     width="10%"
                                     sortProperty="cust_fechaSol"
@@ -149,6 +151,48 @@
                                     <table:template>
                                        <Text text="{solicitudes>cust_fechaSol_Str}" />
                                     </table:template>
+                                </table:Column> 
+                                -->
+                                <table:Column
+                                    width="10%"
+                                    sortProperty="cust_fechaSol_Obj"
+                                    hAlign="Center"
+                                >
+                                    <table:label>
+                                        <Label
+                                            text="{i18n>fechaSolicitud}"
+                                            wrapping="true"
+                                        />
+                                    </table:label>
+                                    <table:template>
+                                        <Text text="{solicitudes>cust_fechaSol_Str}" />
+                                    </table:template>
+
+                                    <table:menu>
+                                        <unified:Menu>
+                                            <unified:items>
+                                                <unified:MenuItem 
+                                                    text="{i18n>xmit.sortAsc}" 
+                                                    icon="sap-icon://sort-ascending" 
+                                                    select="onSortDateAsc"/>
+                                                <unified:MenuItem 
+                                                    text="{i18n>xmit.sortDesc}" 
+                                                    icon="sap-icon://sort-descending" 
+                                                    select="onSortDateDesc"/>
+                                                <unified:MenuItem 
+                                                    text="{i18n>xmit.filterRange}" 
+                                                    icon="sap-icon://filter" 
+                                                    select="onOpenDateFilterDialog"
+                                                    startsSection="true" />
+                                                <unified:MenuItem 
+                                                    id="idMenuClearFilter"
+                                                    text="{i18n>xmit.clearFilter}" 
+                                                    icon="sap-icon://clear-filter" 
+                                                    select="onClearDateFilter"
+                                                    visible="false" />
+                                            </unified:items>
+                                        </unified:Menu>
+                                    </table:menu>
                                 </table:Column>
 
                                 <!-- Columna: Estado -->

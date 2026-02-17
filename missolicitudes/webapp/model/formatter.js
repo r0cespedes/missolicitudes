@@ -33,6 +33,8 @@ sap.ui.define([
                     return "None";
                 case "RA":
                     return "Error";
+                case "RE":
+                    return "Error";
                 default:
                     return "None";
             }
@@ -49,6 +51,8 @@ sap.ui.define([
                 case "CA":
                     return "sap-icon://sys-cancel";
                 case "RA":
+                    return "sap-icon://reset";
+                case "RE":
                     return "sap-icon://decline";
                 default:
                     return "sap-icon://status-inactive";
@@ -69,6 +73,8 @@ sap.ui.define([
                         return this.getI18nText("statusCancelled");
                     case "RA":
                         return this.getI18nText("statusRequiresAction");
+                    case "RE":
+                        return this.getI18nText("statusRefused");
                     default:
                         return this.getI18nText("statusUnknown");
                 }

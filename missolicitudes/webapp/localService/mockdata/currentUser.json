@@ -1,0 +1,14 @@
+{
+    "name": "00000337",
+    "firstname": "00000337",
+    "lastname": "Local",
+    "email": "jeisson.delgado@inetum.com",
+    "displayName": "00000337",
+    "scopes": [
+      "uaa.user",
+      "$XSAPPNAME.Viewer",
+      "$XSAPPNAME.Admin"
+    ]
+  }
+
+  

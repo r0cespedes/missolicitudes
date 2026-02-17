@@ -8,8 +8,15 @@ sap.ui.define([
     "../model/formatter",
     "../Utils/Util",
     "../Utils/DialogManager",
+    "sap/ui/model/Sorter",
+    "sap/m/Dialog",
+    "sap/m/Button",
+    "sap/m/DateRangeSelection",
+    "sap/m/VBox",
+    "sap/m/Label",
+    "sap/m/Title",
 
-], function (Controller, JSONModel, Filter, FilterOperator, DinamicFields, Service, formatter, Util, DialogManager) {
+], function (Controller, JSONModel, Filter, FilterOperator, DinamicFields, Service, formatter, Util, DialogManager, Sorter, Dialog, Button, DateRangeSelection, VBox, Label, Title) {
     "use strict";
 
     return Controller.extend("com.inetum.missolicitudes.controller.Main", {
@@ -26,7 +33,8 @@ sap.ui.define([
 
         loadCurrentUser: async function () {
             await Util.getModelMainAndValidateSession(this);
-            const sUrl = sap.ui.require.toUrl("com/inetum/missolicitudes") + "/user-api/currentUser";
+            const sUrl = sap.ui.require.toUrl("com/inetum/missolicitudes") + "/user-api/currentUser.json";
+
 
             fetch(sUrl)
                 .then(response => {
@@ -115,6 +123,21 @@ sap.ui.define([
                 aFinalRequests.forEach(item => {
                     item.cust_status_Str = formatter.formatNameStatus(item.cust_status);
                     item.cust_fechaSol_Str = formatter.formatDate(item.cust_fechaSol);
+
+                    if (item.cust_fechaSol) {
+                        if (typeof item.cust_fechaSol === "string" && item.cust_fechaSol.indexOf("/Date(") !== -1) {
+                            var timestamp = parseInt(item.cust_fechaSol.match(/\d+/)[0]);
+                            item.cust_fechaSol_Obj = new Date(timestamp);
+                        }
+                        else if (item.cust_fechaSol instanceof Date) {
+                            item.cust_fechaSol_Obj = item.cust_fechaSol;
+                        }
+                        else {
+                            item.cust_fechaSol_Obj = new Date(item.cust_fechaSol);
+                        }
+                    } else {
+                        item.cust_fechaSol_Obj = null;
+                    }
                 });
 
                 // Creación del modelo JSON con la data final
@@ -205,23 +228,8 @@ sap.ui.define([
         },
 
         onSearch: function (oEvent) {
-            var sQuery = oEvent.getParameter("newValue") || oEvent.getParameter("query");
-            var oTable = this.byId("idRequestTable");
-            var oBinding = oTable.getBinding("rows");
-
-            if (sQuery) {
-                var aFilters = [
-                    new sap.ui.model.Filter("cust_nombreSol", sap.ui.model.FilterOperator.Contains, sQuery),
-                    new sap.ui.model.Filter("cust_nombreTSol", sap.ui.model.FilterOperator.Contains, sQuery),
-                    new sap.ui.model.Filter("cust_fechaSol_Str", sap.ui.model.FilterOperator.Contains, sQuery)
-                ];
-                var oMainFilter = new sap.ui.model.Filter(aFilters, false);
-                oBinding.filter([oMainFilter]);
-            } else {
-                oBinding.filter([]);
-                this.clearAllFlters();
-            }
-            this._updateTableCount()
+            this._sSearchQuery = oEvent.getParameter("newValue") || oEvent.getParameter("query");
+            this._applyCombinedFilters();
         },
 
         clearAllFlters: function () {
@@ -549,6 +557,176 @@ sap.ui.define([
             }
         },
 
+        /**
+         * Ordena la columna de fecha de solicitud en orden ascendente.
+         * Llama a la función interna de ordenamiento pasando el campo objeto de fecha.
+         */
+        onSortDateAsc: function () {
+            this._sortColumn("cust_fechaSol_Obj", false);
+        },
 
+        /**
+         * Ordena la columna de fecha de solicitud en orden descendente.
+         */
+        onSortDateDesc: function () {
+            this._sortColumn("cust_fechaSol_Obj", true);
+        },
+
+        /**
+         * Aplica la lógica de ordenamiento al binding de la tabla.
+         * @param {string} sProperty - Nombre de la propiedad del modelo a ordenar.
+         * @param {boolean} bDesc - Define si el orden es descendente (true) o ascendente (false).
+         */
+        _sortColumn: function (sProperty, bDesc) {
+            var oTable = this.byId("idRequestTable");
+            var oBinding = oTable.getBinding("rows");
+            oBinding.sort(new Sorter(sProperty, bDesc));
+        },
+
+        /**
+         * Gestiona la creación y apertura del diálogo de selección de rango de fechas.
+         * Implementa el patrón Singleton para crear el diálogo solo una vez.
+         */
+        onOpenDateFilterDialog: function () {
+            const oResourceBundle = this.getOwnerComponent().getModel("i18n").getResourceBundle();
+
+            // Verifica si el diálogo ya existe para no duplicarlo
+            if (!this._oDateFilterDialog) {
+                // Inicializa el control de selección de rango
+                this._oDRS = new DateRangeSelection({
+                    width: "100%",
+                    placeholder: "dd/mm/aaaa - dd/mm/aaaa",
+                    displayFormat: "dd/MM/yyyy"
+                });
+
+                // Agrega un delegado para modificar el comportamiento del input HTML interno
+                this._oDRS.addEventDelegate({
+                    onAfterRendering: function () {
+                        // Bloquea la escritura manual para forzar el uso del calendario
+                        this.$("inner").attr("readonly", true);
+                    }
+                }, this._oDRS);
+
+                // Construye el contenedor del diálogo
+                this._oDateFilterDialog = new Dialog({
+                    title: oResourceBundle.getText("xtit.dateFilterDialog"),
+                    contentWidth: "320px",
+
+                    // Lógica que se ejecuta al terminar de abrir la ventana
+                    afterOpen: function () {
+                        // Abre el calendario automáticamente si no hay fechas seleccionadas previamente
+                        if (this._oDRS && !this._oDRS.getDateValue()) {
+                            if (this._oDRS.toggleOpen) {
+                                this._oDRS.toggleOpen();
+                            }
+                        }
+                    }.bind(this),
+
+                    content: [
+                        new VBox({
+                            class: "sapUiMediumMargin",
+                            alignItems: "Stretch",
+                            items: [
+                                this._oDRS
+                            ]
+                        })
+                    ],
+                    buttons: [
+                        new Button({
+                            text: oResourceBundle.getText("xbut.filter"),
+                            type: "Emphasized",
+                            press: function () {
+                                this._applyDateFilter();
+                                this._oDateFilterDialog.close();
+                            }.bind(this)
+                        }),
+                        new Button({
+                            text: oResourceBundle.getText("cancel"), 
+                            press: function () {
+                                this._oDateFilterDialog.close();
+                            }.bind(this)
+                        })
+                    ]
+                });
+
+                // Vincula el diálogo a la vista para acceder a los modelos (i18n)
+                this.getView().addDependent(this._oDateFilterDialog);
+            }
+
+            this._oDateFilterDialog.open();
+        },
+
+        /**
+         * Captura las fechas seleccionadas y crea el objeto de filtro.
+         * Almacena el filtro en una variable global del controlador para su uso posterior.
+         */
+        _applyDateFilter: function () {
+            var oDateFrom = this._oDRS.getDateValue();
+            var oDateTo = this._oDRS.getSecondDateValue();
+
+            if (oDateFrom && oDateTo) {
+                // Ajusta la hora de la fecha final para cubrir todo el día 
+                var oDateToFinal = new Date(oDateTo);
+                oDateToFinal.setHours(23, 59, 59, 999);
+
+                // Crea el filtro usando la propiedad de tipo Objeto (Date)
+                this._oDateFilter = new sap.ui.model.Filter("cust_fechaSol_Obj", sap.ui.model.FilterOperator.BT, oDateFrom, oDateToFinal);
+            } else {
+                this._oDateFilter = null;
+            }
+
+            // Invoca la función centralizada para aplicar todos los filtros
+            this._applyCombinedFilters();
+        },
+
+        /**
+         * Limpia el filtro de fechas activo y restablece el control visual.
+         * Oculta la opción de "Limpiar filtro" en el menú de la columna.
+         */
+        onClearDateFilter: function () {
+            if (this._oDRS) {
+                this._oDRS.setValue("");
+                this._oDRS.setDateValue(null);
+            }
+            this._oDateFilter = null; // Elimina la referencia al filtro
+            this._applyCombinedFilters(); // Refresca la tabla
+            this.getView().byId("idMenuClearFilter").setVisible(false); // Oculta el botón del menú
+        },
+
+        /**
+         * Centraliza la lógica de filtrado de la tabla.
+         * Combina el filtro de búsqueda global (OR) con el filtro de rango de fechas (AND).
+         */
+        _applyCombinedFilters: function () {
+            var oTable = this.byId("idRequestTable");
+            var oBinding = oTable.getBinding("rows");
+            var aFinalFilters = [];
+
+            if (this._sSearchQuery) {
+                var aSearchFilters = [
+                    new sap.ui.model.Filter("cust_nombreSol", sap.ui.model.FilterOperator.Contains, this._sSearchQuery),
+                    new sap.ui.model.Filter("cust_nombreTSol", sap.ui.model.FilterOperator.Contains, this._sSearchQuery),
+                    new sap.ui.model.Filter("cust_fechaSol_Str", sap.ui.model.FilterOperator.Contains, this._sSearchQuery),
+                    new sap.ui.model.Filter("cust_status_Str", sap.ui.model.FilterOperator.Contains, this._sSearchQuery),
+                ];
+                aFinalFilters.push(new sap.ui.model.Filter(aSearchFilters, false));
+            }
+
+            // Agrega el Filtro de Rango de Fechas (si está activo)
+            if (this._oDateFilter) {
+                aFinalFilters.push(this._oDateFilter);
+            }
+
+            // Aplica el array final de filtros al binding de la tabla
+            oBinding.filter(aFinalFilters, "Application");
+
+            // Controla la visibilidad del botón "Limpiar Filtro" en el menú de la columna
+            var oMenuClearItem = this.getView().byId("idMenuClearFilter");
+            if (oMenuClearItem) {
+                oMenuClearItem.setVisible(!!this._oDateFilter);
+            }
+            
+            this._updateTableCount();
+        },
     });
 });
